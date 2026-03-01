@@ -51,6 +51,9 @@ final class CameraManager: NSObject, ObservableObject {
     nonisolated(unsafe) private var smoothedRoll:   Double = 0.0
     nonisolated(unsafe) private var smoothedNormX:  Double = 0.0
     nonisolated(unsafe) private var smoothedNormY:  Double = 0.0
+    nonisolated(unsafe) private var lastRawRoll:    Double = 0.0
+    nonisolated(unsafe) private var unwrappedRoll:  Double = 0.0
+    nonisolated(unsafe) private var hasRollSeed = false
 
     // MARK: - Published state
 
@@ -66,6 +69,16 @@ final class CameraManager: NSObject, ObservableObject {
             actionModeFlag = actionModeEnabled
             // Auto-switch lens: ultraWide for Action (needs crop buffer), wide (1x) for Normal
             cameraType = actionModeEnabled ? .ultraWide : .wide
+            // Reset smoothing so mode transitions don't inherit stale roll phase.
+            dataOutputQueue.async { [weak self] in
+                guard let self else { return }
+                self.smoothedRoll = 0.0
+                self.smoothedNormX = 0.0
+                self.smoothedNormY = 0.0
+                self.lastRawRoll = 0.0
+                self.unwrappedRoll = 0.0
+                self.hasRollSeed = false
+            }
             sessionQueue.async { self.applyStabilization() }
         }
     }
@@ -392,7 +405,19 @@ final class CameraManager: NSObject, ObservableObject {
         // Step 2: read motion snapshot and apply per-frame low-pass smoothing.
         let snap = motionSnapshotProvider()
 
-        smoothedRoll  += rollSmoothingAlpha        * (snap.roll    - smoothedRoll)
+        // Unwrap roll around the -pi/pi discontinuity so rotation remains continuous
+        // when the phone is rotated across the branch cut.
+        if !hasRollSeed {
+            lastRawRoll = snap.roll
+            unwrappedRoll = snap.roll
+            smoothedRoll = snap.roll
+            hasRollSeed = true
+        } else {
+            let delta = atan2(sin(snap.roll - lastRawRoll), cos(snap.roll - lastRawRoll))
+            unwrappedRoll += delta
+            lastRawRoll = snap.roll
+            smoothedRoll += rollSmoothingAlpha * (unwrappedRoll - smoothedRoll)
+        }
         smoothedNormX += translationSmoothingAlpha * (snap.offsetX - smoothedNormX)
         smoothedNormY += translationSmoothingAlpha * (snap.offsetY - smoothedNormY)
 
