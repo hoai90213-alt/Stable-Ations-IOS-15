@@ -175,17 +175,10 @@ final class CameraManager: NSObject, ObservableObject {
         guard let conn = videoDataOutput.connection(with: .video) else { return }
         guard conn.isVideoStabilizationSupported else { return }
         if actionModeEnabled {
-            if #available(iOS 18.0, *),
-               conn.isVideoStabilizationModeSupported(.cinematicExtendedEnhanced) {
+            if #available(iOS 18.0, *) {
                 conn.preferredVideoStabilizationMode = .cinematicExtendedEnhanced
-            } else if conn.isVideoStabilizationModeSupported(.cinematicExtended) {
-                conn.preferredVideoStabilizationMode = .cinematicExtended
-            } else if conn.isVideoStabilizationModeSupported(.cinematic) {
-                conn.preferredVideoStabilizationMode = .cinematic
-            } else if conn.isVideoStabilizationModeSupported(.standard) {
-                conn.preferredVideoStabilizationMode = .standard
             } else {
-                conn.preferredVideoStabilizationMode = .auto
+                conn.preferredVideoStabilizationMode = .cinematicExtended
             }
         } else {
             conn.preferredVideoStabilizationMode = .auto
