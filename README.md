@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Platform-iOS%2016%2B-black?style=flat-square&logo=apple" />
+  <img src="https://img.shields.io/badge/Platform-iOS%2015%2B-black?style=flat-square&logo=apple" />
   <img src="https://img.shields.io/badge/Language-Swift-orange?style=flat-square&logo=swift" />
   <img src="https://img.shields.io/badge/Mode-Action%20%7C%20Normal-blue?style=flat-square" />
   <img src="https://img.shields.io/badge/Stabilisation-Horizon%20Lock-green?style=flat-square" />
@@ -67,6 +67,15 @@ Picture a picture frame floating inside a larger canvas. When the canvas tilts, 
 
 **Translation correction** - the phone jerks sideways or up/down, the crop window slides the opposite way to compensate. The accelerometer detects the movement, integrates it into a velocity, and shifts the window against it. When movement stops, the window drifts back to centre automatically.
 
+### iOS 15 compatibility mechanism
+
+To keep the same behavior on iOS 15, Stable Action uses:
+
+- **Deployment target 15.0** in project and target settings.
+- **Continuous roll unwrapping** before smoothing, so crossing the `-π/π` angle boundary does not cause sudden rotation flips.
+- **iOS 15-safe APIs** in UI/video code (for example, tap handling and thumbnail generation paths).
+- **Availability gates** for newer stabilization modes (newest mode on iOS 18+, fallback mode on lower versions).
+
 ### Hardware on top
 
 Stable Action also engages the iPhone's built-in ISP stabilisation on every frame. Hardware cleans up micro-jitter - hand tremor, footstep impact, engine vibration. Software handles the macro roll. The two layers stack.
@@ -99,9 +108,20 @@ Stable Action also engages the iPhone's built-in ISP stabilisation on every fram
 
 ## Requirements
 
-- iPhone with iOS 16 or later
+- iPhone with iOS 15 or later
 - iOS 18 or later for best Action Mode stabilisation
 - Physical device required - camera and gyroscope unavailable in Simulator
+
+---
+
+## CI And Release
+
+- GitHub Actions builds on `macos-latest`.
+- The workflow creates an **unsigned** IPA and uploads it as artifact.
+- The same IPA is published to a rolling pre-release tag: **`ci-latest`**.
+- Old workflow runs are auto-cleaned (latest 5 runs are kept).
+
+To download the newest IPA, open the repository Releases page and pick the latest asset from `ci-latest`.
 
 ---
 

@@ -8,6 +8,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: write
+  actions: write
+
 jobs:
   build:
     runs-on: macos-latest
@@ -99,3 +103,68 @@ jobs:
           name: ios-ipa-unsigned
           path: artifacts/StableAction-unsigned.ipa
           if-no-files-found: error
+
+      - name: Publish IPA To Rolling Release
+        if: github.event_name != 'pull_request'
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ci-latest
+          name: Stable Action CI Latest (iOS 15+)
+          prerelease: true
+          allowUpdates: true
+          replacesArtifacts: true
+          artifactErrorsFailBuild: true
+          artifacts: artifacts/StableAction-unsigned.ipa
+          body: |
+            Auto-generated unsigned IPA from the latest successful CI build.
+
+            Compatibility notes:
+            - Deployment target: iOS 15.0
+            - Roll stabilization uses continuous angle unwrapping to avoid rotation jumps.
+            - iOS 15-safe APIs are used for thumbnail generation and tap handling.
+
+            Commit: ${{ github.sha }}
+            Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Delete older workflow runs (keep latest 5)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const workflowId = context.workflow;
+            const keep = 5;
+
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRunsForRepo,
+              {
+                owner,
+                repo,
+                per_page: 100,
+                status: "completed"
+              }
+            );
+
+            const sameWorkflow = runs
+              .filter(run => run.name === workflowId)
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            const candidates = sameWorkflow.filter(run => run.id !== context.runId);
+            const toDelete = candidates.slice(keep - 1);
+
+            core.info(`Found ${sameWorkflow.length} completed runs for workflow "${workflowId}".`);
+            core.info(`Keeping latest ${keep}; deleting ${toDelete.length}.`);
+
+            for (const run of toDelete) {
+              await github.rest.actions.deleteWorkflowRun({
+                owner,
+                repo,
+                run_id: run.id
+              });
+              core.info(`Deleted run ${run.id} (${run.head_sha})`);
+            }
