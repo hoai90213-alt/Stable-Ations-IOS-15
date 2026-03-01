@@ -235,14 +235,8 @@ private struct VideoThumbnailView: View {
         gen.appliesPreferredTrackTransform = true
         gen.maximumSize = CGSize(width: 120, height: 120)
         let time = CMTime(seconds: 0.1, preferredTimescale: 600)
-        var result: UIImage?
-        let sem = DispatchSemaphore(value: 0)
-        gen.generateCGImageAsynchronously(for: time) { cg, _, _ in
-            if let cg { result = UIImage(cgImage: cg) }
-            sem.signal()
-        }
-        sem.wait()
-        return result
+        guard let cg = try? gen.copyCGImage(at: time, actualTime: nil) else { return nil }
+        return UIImage(cgImage: cg)
     }
 }
 
