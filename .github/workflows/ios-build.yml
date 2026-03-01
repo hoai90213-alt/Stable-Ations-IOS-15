@@ -44,3 +44,58 @@ jobs:
             echo "::error title=xcodebuild failed::$first_error"
             exit "$status"
           fi
+
+      - name: Archive iOS app (Device, unsigned)
+        shell: bash
+        run: |
+          set +e
+          set -o pipefail
+          ARCHIVE_PATH="$RUNNER_TEMP/StableAction.xcarchive"
+          xcodebuild \
+            -project "Stable Action.xcodeproj" \
+            -target "Stable Action" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -archivePath "$ARCHIVE_PATH" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            archive 2>&1 | tee xcodearchive.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ]; then
+            echo "::group::xcodearchive errors"
+            grep -n "error:" xcodearchive.log | tail -n 30 || true
+            echo "::endgroup::"
+            first_error=$(grep -m1 "error:" xcodearchive.log || echo "xcode archive failed with exit code $status")
+            echo "::error title=xcode archive failed::$first_error"
+            exit "$status"
+          fi
+
+      - name: Package IPA (unsigned)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARCHIVE_PATH="$RUNNER_TEMP/StableAction.xcarchive"
+          APP_PATH="$(find "$ARCHIVE_PATH/Products/Applications" -maxdepth 1 -type d -name "*.app" | head -n 1)"
+          if [ -z "${APP_PATH:-}" ]; then
+            echo "::error title=IPA packaging failed::No .app found in archive."
+            exit 1
+          fi
+          rm -rf "$RUNNER_TEMP/Payload"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
+          (
+            cd "$RUNNER_TEMP"
+            zip -qry "StableAction-unsigned.ipa" "Payload"
+          )
+          mkdir -p artifacts
+          cp "$RUNNER_TEMP/StableAction-unsigned.ipa" artifacts/
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa-unsigned
+          path: artifacts/StableAction-unsigned.ipa
+          if-no-files-found: error
